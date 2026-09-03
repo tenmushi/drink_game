@@ -19,21 +19,33 @@ public class LobbyRoomUI : MonoBehaviour
     [SerializeField] private Button openJoinButton;
     [SerializeField] private Button joinButton;
     [SerializeField] private Button backButton;
+    [SerializeField] private Button leaveButton;   // StatusPanel に置く「戻る/退出」
 
     [Header("テキスト")]
     [SerializeField] private TMP_InputField codeInput;
     [SerializeField] private TMP_Text statusText;
+    [SerializeField] private TMP_Text joinCodeText;   // パネルの外に置く常時表示
+
+    /// <summary>発行済みの参加コード。シーンを読み直しても消えないよう static。</summary>
+    public static string CurrentJoinCode;
 
     private RelayManager relay;
 
     private void Start()
     {
         relay = FindFirstObjectByType<RelayManager>();
+        if (relay == null)
+        {
+            SetStatus("NetworkManager が見つかりません。NetworkBase シーンから再生してください");
+            SetInteractable(false);
+        }
+        RefreshJoinCode();
 
         if (createButton != null) createButton.onClick.AddListener(OnCreate);
         if (openJoinButton != null) openJoinButton.onClick.AddListener(() => ShowPanel(joinPanel));
         if (backButton != null) backButton.onClick.AddListener(() => ShowPanel(choicePanel));
         if (joinButton != null) joinButton.onClick.AddListener(OnJoin);
+        if (leaveButton != null) leaveButton.onClick.AddListener(OnLeave);
 
         var nm = NetworkManager.Singleton;
         if (nm != null && (nm.IsClient || nm.IsServer))
@@ -64,7 +76,9 @@ public class LobbyRoomUI : MonoBehaviour
             return;
         }
 
-        SetStatus("参加コード: " + code + "\n他のプレイヤーの参加を待っています");
+        CurrentJoinCode = code;
+        RefreshJoinCode();
+        SetStatus("他のプレイヤーの参加を待っています");
     }
 
     private async void OnJoin()
@@ -87,7 +101,30 @@ public class LobbyRoomUI : MonoBehaviour
             return;
         }
 
+        CurrentJoinCode = code;
+        RefreshJoinCode();
         SetStatus("接続しました");
+    }
+
+    /// <summary>
+    /// 接続を切って、ロビーを最初からやり直す。
+    /// シーンごと読み直すのでカメラ・カーソル・スポーン済みプレイヤーが全部リセットされる。
+    /// </summary>
+    private void OnLeave()
+    {
+        var nm = NetworkManager.Singleton;
+        if (nm != null && (nm.IsClient || nm.IsServer))
+        {
+            nm.Shutdown();
+        }
+
+        CurrentJoinCode = null;
+
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        UnityEngine.SceneManagement.SceneManager.LoadScene(
+            UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
     }
 
     private void ShowPanel(GameObject target)
@@ -95,6 +132,14 @@ public class LobbyRoomUI : MonoBehaviour
         if (choicePanel != null) choicePanel.SetActive(choicePanel == target);
         if (joinPanel != null) joinPanel.SetActive(joinPanel == target);
         if (statusPanel != null) statusPanel.SetActive(statusPanel == target);
+    }
+
+    private void RefreshJoinCode()
+    {
+        if (joinCodeText == null) return;
+        joinCodeText.text = string.IsNullOrEmpty(CurrentJoinCode)
+            ? ""
+            : "ルームID  " + CurrentJoinCode;
     }
 
     private void SetStatus(string message)
