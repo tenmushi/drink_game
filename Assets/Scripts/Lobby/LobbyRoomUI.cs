@@ -1,6 +1,7 @@
 using TMPro;
 using Unity.Netcode;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
@@ -38,6 +39,7 @@ public class LobbyRoomUI : MonoBehaviour
     public static string PendingMessage;
 
     private RelayManager relay;
+    private int lastSubmitFrame = -1;
 
     private void Start()
     {
@@ -55,8 +57,9 @@ public class LobbyRoomUI : MonoBehaviour
         if (createButton != null) createButton.onClick.AddListener(OnCreate);
         if (openJoinButton != null) openJoinButton.onClick.AddListener(() => ShowPanel(joinPanel));
         if (backButton != null) backButton.onClick.AddListener(() => ShowPanel(choicePanel));
-        if (joinButton != null) joinButton.onClick.AddListener(OnJoin);
+        if (joinButton != null) joinButton.onClick.AddListener(TrySubmitJoin);
         if (leaveButton != null) leaveButton.onClick.AddListener(OnLeave);
+        if (codeInput != null) codeInput.onSubmit.AddListener(_ => TrySubmitJoin());
 
         var nm = NetworkManager.Singleton;
         if (nm != null)
@@ -87,6 +90,29 @@ public class LobbyRoomUI : MonoBehaviour
         {
             ShowPanel(choicePanel);
         }
+    }
+
+    private void Update()
+    {
+        // JoinPanel を開いている間は、入力欄にフォーカスが無くても Enter で参加できる
+        if (joinPanel == null || !joinPanel.activeInHierarchy) return;
+
+        var kb = Keyboard.current;
+        if (kb == null) return;
+        if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame)
+        {
+            TrySubmitJoin();
+        }
+    }
+
+    /// <summary>Enter と参加ボタンの共通入口。同じフレームで二重に走らせない。</summary>
+    private void TrySubmitJoin()
+    {
+        if (Time.frameCount == lastSubmitFrame) return;
+        lastSubmitFrame = Time.frameCount;
+
+        if (joinButton != null && !joinButton.interactable) return;
+        OnJoin();
     }
 
     private void OnDestroy()
