@@ -338,6 +338,7 @@ GameObject:
   - component: {fileID: 2045583592}
   - component: {fileID: 2045583596}
   - component: {fileID: 2045583595}
+  - component: {fileID: 2045583597}
   m_Layer: 0
   m_Name: NetworkManager
   m_TagString: Untagged
@@ -441,7 +442,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2045583591}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b65f3c18f74a5724fbf3bb2ee654d187, type: 3}
   m_Name: 
@@ -458,6 +459,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cdee7c38406a5524391e56bb1f0a815e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NewMonoBehaviourScript
+--- !u!114 &2045583597
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2045583591}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 30df1abf0b1f63d4eb5d89fe3dfbbeac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BootstrapLoader
+  firstScene: Lobby
 --- !u!1 &2134892283
 GameObject:
   m_ObjectHideFlags: 0
