@@ -33,6 +33,10 @@ public class NetworkPlayer : NetworkBehaviour
     [SerializeField] private AudioListener playerAudio;
     [SerializeField] private FirstPersonLook look;
 
+    [Header("一人称表示")]
+    [Tooltip("自分のプレイヤーの見た目を隠す。カメラが目の位置にあるため、切ると目玉の内側が映る")]
+    [SerializeField] private bool hideOwnBody = true;
+
     [Header("同期の頻度と滑らかさ")]
     [SerializeField] private float sendInterval = 0.1f;   // 秒
     [SerializeField] private float sendThreshold = 1.5f;  // 度
@@ -54,6 +58,15 @@ public class NetworkPlayer : NetworkBehaviour
             if (Camera.main != null && Camera.main != playerCamera)
             {
                 Camera.main.gameObject.SetActive(false);
+            }
+
+            // 自分の体と目は隠す。カメラが目の位置にあるので、そのままだと目玉の内側が映る
+            if (hideOwnBody)
+            {
+                foreach (var r in GetComponentsInChildren<Renderer>(true))
+                {
+                    r.enabled = false;
+                }
             }
         }
 
