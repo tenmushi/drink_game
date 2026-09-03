@@ -24,6 +24,12 @@ public class FirstPersonLook : MonoBehaviour
     private float pitch;
     private bool dragging;
 
+    /// <summary>現在の左右角(度)。親の正面を0とする。</summary>
+    public float Yaw { get { return yaw; } }
+
+    /// <summary>現在の上下角(度)。</summary>
+    public float Pitch { get { return pitch; } }
+
     private void OnEnable()
     {
         // 念のため: 以前の設定が残っていてもカーソルを解放する
