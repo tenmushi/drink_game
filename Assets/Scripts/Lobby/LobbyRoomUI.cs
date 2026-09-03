@@ -1,4 +1,3 @@
-using System.Collections;
 using TMPro;
 using Unity.Netcode;
 using UnityEngine;
@@ -33,23 +32,25 @@ public class LobbyRoomUI : MonoBehaviour
     public static string CurrentJoinCode;
 
     /// <summary>再読み込み直後に強制的に ChoicePanel を出すためのフラグ。</summary>
-    private static bool forceChoicePanel;
+    public static bool ForceChoicePanel;
 
     /// <summary>切断メッセージ。次のシーンで表示する。</summary>
-    private static string pendingMessage;
+    public static string PendingMessage;
 
     private RelayManager relay;
-    private bool leaving;
 
     private void Start()
     {
         relay = FindFirstObjectByType<RelayManager>();
         if (relay == null)
         {
-            SetStatus("NetworkManager が見つかりません。NetworkBase シーンから再生してください");
+            const string msg = "NetworkManager がありません。NetworkBase シーンから再生してください";
+            SetStatus(msg);
             SetInteractable(false);
+            // ChoicePanel 表示中は StatusText が見えないので、常時表示側にも出す
+            if (joinCodeText != null) joinCodeText.text = msg;
         }
-        RefreshJoinCode();
+        if (relay != null) RefreshJoinCode();
 
         if (createButton != null) createButton.onClick.AddListener(OnCreate);
         if (openJoinButton != null) openJoinButton.onClick.AddListener(() => ShowPanel(joinPanel));
@@ -65,16 +66,16 @@ public class LobbyRoomUI : MonoBehaviour
             nm.OnServerStopped += HandleStopped;
         }
 
-        if (forceChoicePanel)
+        if (ForceChoicePanel)
         {
             // 退出直後。Shutdown の完了を待ってから読み直しているので、素直に選択画面へ
-            forceChoicePanel = false;
+            ForceChoicePanel = false;
             ShowPanel(choicePanel);
             SetInteractable(true);
-            if (!string.IsNullOrEmpty(pendingMessage))
+            if (!string.IsNullOrEmpty(PendingMessage))
             {
-                SetStatus(pendingMessage);
-                pendingMessage = null;
+                SetStatus(PendingMessage);
+                PendingMessage = null;
             }
         }
         else if (nm != null && (nm.IsClient || nm.IsServer))
@@ -122,6 +123,13 @@ public class LobbyRoomUI : MonoBehaviour
         string code = codeInput != null ? codeInput.text.Trim().ToUpper() : "";
         if (string.IsNullOrEmpty(code)) return;
 
+        // Relay の参加コードは英数字6文字。形式が違うなら通信する前に弾く
+        if (!IsValidJoinCode(code))
+        {
+            SetStatus("ルームIDは英数字6文字です。入力を確認してください");
+            return;
+        }
+
         SetInteractable(false);
         SetStatus("接続中...");
         ShowPanel(statusPanel);
@@ -131,8 +139,14 @@ public class LobbyRoomUI : MonoBehaviour
         var nm = NetworkManager.Singleton;
         if (nm == null || !nm.IsClient)
         {
+            // 失敗時に中途半端な状態が残ると、次の試行が不安定になる。確実に止めておく
+            if (nm != null && (nm.IsListening || nm.ShutdownInProgress))
+            {
+                nm.Shutdown();
+            }
+
             SetStatus("接続に失敗しました。コードを確認してください");
-            ShowPanel(choicePanel);
+            ShowPanel(joinPanel);   // 入力欄を出したままにして、打ち直せるようにする
             SetInteractable(true);
             return;
         }
@@ -145,49 +159,28 @@ public class LobbyRoomUI : MonoBehaviour
     /// <summary>退出ボタン。自分から切る。</summary>
     private void OnLeave()
     {
-        if (leaving) return;
-        leaving = true;
         Debug.Log("[LobbyRoomUI] 退出します");
-        StartCoroutine(LeaveRoutine(true, null));
+        LeaveRunner.Run(true, null);
     }
 
     /// <summary>ホストが落ちた・通信が切れた等、自分の意思によらず停止したとき。</summary>
     private void HandleStopped(bool wasHost)
     {
-        if (leaving) return;
-        leaving = true;
+        if (LeaveRunner.IsRunning) return;   // 自分で押した退出と二重に走らせない
         Debug.Log("[LobbyRoomUI] 接続が終了しました");
-        StartCoroutine(LeaveRoutine(false, wasHost ? null : "ホストとの接続が切れました"));
+        LeaveRunner.Run(false, wasHost ? null : "ホストとの接続が切れました");
     }
 
-    /// <summary>
-    /// Shutdown は即座には終わらないので、完全に停止してからシーンを読み直す。
-    /// ここを待たずに読み直すと、再開後も接続中と判定されて StatusPanel が出てしまう。
-    /// </summary>
-    private IEnumerator LeaveRoutine(bool callShutdown, string message)
+    /// <summary>Relay の参加コード形式(英数字6文字)かどうか。</summary>
+    private static bool IsValidJoinCode(string code)
     {
-        forceChoicePanel = true;
-        pendingMessage = message;
-        CurrentJoinCode = null;
-
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
-
-        var nm = NetworkManager.Singleton;
-        if (callShutdown && nm != null && (nm.IsClient || nm.IsServer))
+        if (code.Length != 6) return false;
+        foreach (char c in code)
         {
-            nm.Shutdown();
+            bool ok = (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+            if (!ok) return false;
         }
-
-        float elapsed = 0f;
-        while (nm != null && (nm.ShutdownInProgress || nm.IsListening) && elapsed < 3f)
-        {
-            elapsed += Time.unscaledDeltaTime;
-            yield return null;
-        }
-        yield return null;   // 停止処理が完全に反映される1フレームを待つ
-
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+        return true;
     }
 
     private void ShowPanel(GameObject target)
