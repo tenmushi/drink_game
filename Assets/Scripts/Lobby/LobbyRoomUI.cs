@@ -112,6 +112,7 @@ public class LobbyRoomUI : MonoBehaviour
     /// </summary>
     private void OnLeave()
     {
+        Debug.Log("[LobbyRoomUI] 退出します");
         var nm = NetworkManager.Singleton;
         if (nm != null && (nm.IsClient || nm.IsServer))
         {
