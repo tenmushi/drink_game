@@ -471,7 +471,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 30df1abf0b1f63d4eb5d89fe3dfbbeac, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BootstrapLoader
-  firstScene: Lobby
+  firstScene: Title
 --- !u!1 &2134892283
 GameObject:
   m_ObjectHideFlags: 0
