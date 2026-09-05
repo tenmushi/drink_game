@@ -155,8 +155,13 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   faceRenderer: {fileID: 0}
   slotMoveSpeed: 8
-  returnMoveSpeed: 2
+  returnMoveSpeed: 4
   NetPairId:
+    UpdateTraits:
+      MinSecondsBetweenUpdates: 0
+      MaxSecondsBetweenUpdates: 0
+    m_InternalValue: 0
+  NetRingIndex:
     UpdateTraits:
       MinSecondsBetweenUpdates: 0
       MaxSecondsBetweenUpdates: 0
