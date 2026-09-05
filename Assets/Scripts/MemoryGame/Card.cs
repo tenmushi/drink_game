@@ -1,4 +1,5 @@
 using System;
+using Unity.Netcode;
 using UnityEngine;
 
 public enum CardState
@@ -9,29 +10,42 @@ public enum CardState
     Matched
 }
 
-public class Card : MonoBehaviour
+public class Card : NetworkBehaviour
 {
     [SerializeField] private MeshRenderer faceRenderer;
     [SerializeField] private float slotMoveSpeed = 8f;
     [SerializeField] private float returnMoveSpeed = 2f;
 
-    public int PairId { get; private set; }
-    public CardState State { get; private set; } = CardState.Free;
-    public bool IsFaceUp { get; private set; }
+    public NetworkVariable<int> NetPairId = new NetworkVariable<int>(
+        0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    // 0 = ring A (left, red back), 1 = ring B (right, dark back).
+    public NetworkVariable<int> NetRingIndex = new NetworkVariable<int>(
+        0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    public NetworkVariable<int> NetState = new NetworkVariable<int>(
+        (int)CardState.Free, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    public NetworkVariable<bool> NetFaceUp = new NetworkVariable<bool>(
+        false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    // Which reveal slot this card is heading to/sitting in while Selected: 0=none, 1=A, 2=B.
+    public NetworkVariable<int> NetRevealSlot = new NetworkVariable<int>(
+        0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    // The card's fixed slot on the shared ring. Position is derived live from
-    // Time.time each frame, so a card that has been away (Selected/Returning)
-    // always rejoins its slot in sync with the rest of the ring, never lagging behind.
-    private Vector3 orbitCenter;
-    private float orbitRadius;
-    private float orbitAngularSpeed;
-    private float slotAngleOffset;
+    // Fixed orbit slot params, set once by the server before Spawn(). Combined with the
+    // Netcode-synced clock, every peer derives the same position with zero transform sync.
+    public NetworkVariable<Vector3> NetOrbitCenter = new NetworkVariable<Vector3>(
+        default, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    public NetworkVariable<float> NetOrbitRadius = new NetworkVariable<float>(
+        1f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    public NetworkVariable<float> NetOrbitAngularSpeed = new NetworkVariable<float>(
+        0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    public NetworkVariable<float> NetSlotAngleOffset = new NetworkVariable<float>(
+        0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    private Vector3 slotTarget;
-    private Action onArrivedAtSlot;
+    public int PairId => NetPairId.Value;
+    public CardState State => (CardState)NetState.Value;
+    public bool IsFaceUp => NetFaceUp.Value;
 
-    private Material backMaterial;
-    private Material frontMaterial;
+    // Server-only: fires once this card's local simulation reaches its reveal slot.
+    private Action serverArrivedCallback;
 
     void Awake()
     {
@@ -41,26 +55,82 @@ public class Card : MonoBehaviour
         }
     }
 
-    public void Init(int pairId, Material back, Material front, Vector3 center, float radius, float angularSpeed, float initialAngle)
+    public override void OnNetworkSpawn()
     {
-        PairId = pairId;
-        backMaterial = back;
-        frontMaterial = front;
-        orbitCenter = center;
-        orbitRadius = radius;
-        orbitAngularSpeed = angularSpeed;
-        slotAngleOffset = initialAngle - angularSpeed * Time.time;
+        NetFaceUp.OnValueChanged += HandleFaceUpChanged;
+        NetState.OnValueChanged += HandleStateChanged;
+        ApplyFaceMaterial(NetFaceUp.Value);
+        if (State == CardState.Free)
+        {
+            transform.position = LiveOrbitPosition();
+        }
+        if (State == CardState.Matched)
+        {
+            HideMatchedCard();
+        }
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        NetFaceUp.OnValueChanged -= HandleFaceUpChanged;
+        NetState.OnValueChanged -= HandleStateChanged;
+    }
+
+    void HandleFaceUpChanged(bool previous, bool current)
+    {
+        ApplyFaceMaterial(current);
+    }
+
+    void HandleStateChanged(int previous, int current)
+    {
+        if ((CardState)current == CardState.Matched)
+        {
+            HideMatchedCard();
+        }
+    }
+
+    // Netcode's NetworkObject.Despawn() has proven unreliable for these dynamically-spawned
+    // cards (internal NullRefs), so a matched card is simply hidden/disabled locally on every
+    // peer instead of being despawned - the NetworkObject stays alive but invisible and inert.
+    void HideMatchedCard()
+    {
+        if (faceRenderer != null) faceRenderer.enabled = false;
+        var col = GetComponent<Collider>();
+        if (col != null) col.enabled = false;
+    }
+
+    void ApplyFaceMaterial(bool faceUp)
+    {
+        if (faceRenderer == null || MemoryGameManager.Instance == null) return;
+        faceRenderer.sharedMaterial = faceUp
+            ? MemoryGameManager.Instance.GetFaceMaterial(NetPairId.Value)
+            : MemoryGameManager.Instance.GetBackMaterial(NetRingIndex.Value);
+    }
+
+    /// <summary>Server only. Assigns this card's fixed orbit slot, pair id and ring before Spawn().</summary>
+    public void ServerInit(int pairId, int ringIndex, Vector3 center, float radius, float angularSpeed, float initialAngle)
+    {
+        NetPairId.Value = pairId;
+        NetRingIndex.Value = ringIndex;
+        NetOrbitCenter.Value = center;
+        NetOrbitRadius.Value = radius;
+        NetOrbitAngularSpeed.Value = angularSpeed;
+        NetSlotAngleOffset.Value = initialAngle - angularSpeed * NetworkTimeNow();
+        NetState.Value = (int)CardState.Free;
         transform.position = LiveOrbitPosition();
-        State = CardState.Free;
-        SetFaceUp(false);
+    }
+
+    static float NetworkTimeNow()
+    {
+        return NetworkManager.Singleton != null ? (float)NetworkManager.Singleton.ServerTime.Time : Time.time;
     }
 
     Vector3 LiveOrbitPosition()
     {
-        float angle = slotAngleOffset + orbitAngularSpeed * Time.time;
-        float x = Mathf.Cos(angle) * orbitRadius;
-        float y = Mathf.Sin(angle) * orbitRadius;
-        return orbitCenter + new Vector3(x, y, 0f);
+        float angle = NetSlotAngleOffset.Value + NetOrbitAngularSpeed.Value * NetworkTimeNow();
+        float x = Mathf.Cos(angle) * NetOrbitRadius.Value;
+        float y = Mathf.Sin(angle) * NetOrbitRadius.Value;
+        return NetOrbitCenter.Value + new Vector3(x, y, 0f);
     }
 
     void Update()
@@ -70,60 +140,70 @@ public class Card : MonoBehaviour
             case CardState.Free:
                 transform.position = LiveOrbitPosition();
                 break;
+
             case CardState.Selected:
-                MoveTowardFixedTarget(slotMoveSpeed);
+            {
+                Vector3 target = ResolveSlotTarget();
+                transform.position = Vector3.MoveTowards(transform.position, target, slotMoveSpeed * Time.deltaTime);
+                // Arrival decides game state, so only the server's own simulation may act on it -
+                // clients' copies of this animation might land a few frames apart and that's fine.
+                if (IsServer && (transform.position - target).sqrMagnitude < 0.0004f)
+                {
+                    var callback = serverArrivedCallback;
+                    serverArrivedCallback = null;
+                    callback?.Invoke();
+                }
                 break;
+            }
+
             case CardState.Returning:
-                MoveTowardOrbitSlot();
+            {
+                Vector3 target = LiveOrbitPosition();
+                transform.position = Vector3.MoveTowards(transform.position, target, returnMoveSpeed * Time.deltaTime);
+                if (IsServer && (transform.position - target).sqrMagnitude < 0.0009f)
+                {
+                    NetState.Value = (int)CardState.Free;
+                }
                 break;
+            }
         }
     }
 
-    void MoveTowardFixedTarget(float speed)
+    Vector3 ResolveSlotTarget()
     {
-        transform.position = Vector3.MoveTowards(transform.position, slotTarget, speed * Time.deltaTime);
-        if ((transform.position - slotTarget).sqrMagnitude < 0.0004f)
-        {
-            var callback = onArrivedAtSlot;
-            onArrivedAtSlot = null;
-            callback?.Invoke();
-        }
+        if (MemoryGameManager.Instance == null) return transform.position;
+        Transform slot = NetRevealSlot.Value == 1 ? MemoryGameManager.Instance.RevealSlotA : MemoryGameManager.Instance.RevealSlotB;
+        return slot != null ? slot.position : transform.position;
     }
 
-    void MoveTowardOrbitSlot()
+    /// <summary>Server only.</summary>
+    public void MoveToSlot(int slotIndex, Action onArrivedServer)
     {
-        Vector3 target = LiveOrbitPosition();
-        transform.position = Vector3.MoveTowards(transform.position, target, returnMoveSpeed * Time.deltaTime);
-        if ((transform.position - target).sqrMagnitude < 0.0009f)
-        {
-            State = CardState.Free;
-        }
+        if (!IsServer) return;
+        NetRevealSlot.Value = slotIndex;
+        serverArrivedCallback = onArrivedServer;
+        NetState.Value = (int)CardState.Selected;
     }
 
-    public void MoveToSlot(Vector3 target, Action onArrived)
-    {
-        State = CardState.Selected;
-        slotTarget = target;
-        onArrivedAtSlot = onArrived;
-    }
-
+    /// <summary>Server only.</summary>
     public void ReturnToFree()
     {
-        SetFaceUp(false);
-        State = CardState.Returning;
+        if (!IsServer) return;
+        NetFaceUp.Value = false;
+        NetState.Value = (int)CardState.Returning;
     }
 
+    /// <summary>Server only.</summary>
     public void SetMatched()
     {
-        State = CardState.Matched;
+        if (!IsServer) return;
+        NetState.Value = (int)CardState.Matched;
     }
 
+    /// <summary>Server only.</summary>
     public void SetFaceUp(bool faceUp)
     {
-        IsFaceUp = faceUp;
-        if (faceRenderer != null)
-        {
-            faceRenderer.sharedMaterial = faceUp ? frontMaterial : backMaterial;
-        }
+        if (!IsServer) return;
+        NetFaceUp.Value = faceUp;
     }
 }

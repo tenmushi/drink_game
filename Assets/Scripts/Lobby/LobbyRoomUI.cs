@@ -23,6 +23,7 @@ public class LobbyRoomUI : MonoBehaviour
     [SerializeField] private Button joinButton;
     [SerializeField] private Button backButton;
     [SerializeField] private Button leaveButton;   // StatusPanel に置く「戻る/退出」
+    [SerializeField] private Button startGameButton;   // StatusPanel に置く、ホストだけに見せる
 
     [Header("テキスト")]
     [SerializeField] private TMP_InputField codeInput;
@@ -59,6 +60,7 @@ public class LobbyRoomUI : MonoBehaviour
         if (backButton != null) backButton.onClick.AddListener(() => ShowPanel(choicePanel));
         if (joinButton != null) joinButton.onClick.AddListener(TrySubmitJoin);
         if (leaveButton != null) leaveButton.onClick.AddListener(OnLeave);
+        if (startGameButton != null) startGameButton.onClick.AddListener(OnStartGame);
         if (codeInput != null) codeInput.onSubmit.AddListener(_ => TrySubmitJoin());
 
         var nm = NetworkManager.Singleton;
@@ -85,6 +87,7 @@ public class LobbyRoomUI : MonoBehaviour
         {
             ShowPanel(statusPanel);
             SetStatus(nm.IsHost ? "ホストとして待機中" : "接続済み");
+            SetStartButtonVisible(nm.IsHost);
         }
         else
         {
@@ -128,6 +131,7 @@ public class LobbyRoomUI : MonoBehaviour
         SetInteractable(false);
         SetStatus("ルームを作成中...");
         ShowPanel(statusPanel);
+        SetStartButtonVisible(false); // 作成が終わるまでは押せる状態を見せない
 
         string code = await relay.CreateRelay();
 
@@ -142,6 +146,7 @@ public class LobbyRoomUI : MonoBehaviour
         CurrentJoinCode = code;
         RefreshJoinCode();
         SetStatus("他のプレイヤーの参加を待っています");
+        SetStartButtonVisible(true);
     }
 
     private async void OnJoin()
@@ -180,6 +185,21 @@ public class LobbyRoomUI : MonoBehaviour
         CurrentJoinCode = code;
         RefreshJoinCode();
         SetStatus("接続しました");
+        SetStartButtonVisible(false);
+    }
+
+    /// <summary>ホストだけが押せる「ゲーム開始」。MemoryGameシーンにはNetworkObjectが入るので、
+    /// 全クライアントに同期されるNetworkManagerのSceneManager経由でロードする。</summary>
+    private void OnStartGame()
+    {
+        var nm = NetworkManager.Singleton;
+        if (nm == null || !nm.IsHost) return;
+        nm.SceneManager.LoadScene("MemoryGame", LoadSceneMode.Single);
+    }
+
+    private void SetStartButtonVisible(bool visible)
+    {
+        if (startGameButton != null) startGameButton.gameObject.SetActive(visible);
     }
 
     /// <summary>退出ボタン。自分から切る。</summary>

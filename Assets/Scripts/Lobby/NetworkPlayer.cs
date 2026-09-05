@@ -44,6 +44,15 @@ public class NetworkPlayer : NetworkBehaviour
 
     private float nextSendTime;
 
+    /// <summary>ミニゲームなど一人称視点が不要な画面に入る時、自分のカメラ/視点操作を止めるために呼ぶ。</summary>
+    public void SetFirstPersonViewActive(bool active)
+    {
+        if (!IsOwner) return;
+        if (playerCamera != null) playerCamera.enabled = active;
+        if (playerAudio != null) playerAudio.enabled = active;
+        if (look != null) look.enabled = active;
+    }
+
     public override void OnNetworkSpawn()
     {
         SeatIndex.OnValueChanged += HandleSeatChanged;
