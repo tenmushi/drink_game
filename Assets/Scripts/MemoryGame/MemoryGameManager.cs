@@ -83,13 +83,11 @@ public class MemoryGameManager : NetworkBehaviour
         // NetworkManager.LocalClient.PlayerObject はシーン遷移直後だと(特にホスト以外のクライアントで)
         // まだ解決できないことがあるため、LocalNetworkPlayer() 頼みにせず全プレイヤーを見て回る -
         // SetFirstPersonViewActive は内部で IsOwner を見るので、他人の分を呼んでも何も起きない。
-        // 重要: プレイヤーの一人称カメラも "MainCamera" タグを持っているため、これを無効化する前に
-        // Camera.main を読むと、どちらが返るかは不定(2人目以降でカードの裏を向いたプレイヤー自身の
-        // カメラが選ばれてしまうことがあった)。無効化を先に済ませてから解決する。
+        // なお NetworkPlayer 側も自分でシーンに応じてこれを切り替えるが、ここでの明示的な呼び出しは
+        // 保険として残しておく(害はない)。
         foreach (NetworkPlayer player in FindObjectsByType<NetworkPlayer>(FindObjectsSortMode.None))
         {
             player.SetFirstPersonViewActive(false);
-            player.SetBodyVisible(false); // カード列に体が浮いて映るのを防ぐ(所有者以外の体もここで消す)
         }
         mainCamera = fixedCamera != null ? fixedCamera : Camera.main;
         if (mainCamera != null)

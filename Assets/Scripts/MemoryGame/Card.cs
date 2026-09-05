@@ -47,12 +47,6 @@ public class Card : NetworkBehaviour
     // Server-only: fires once this card's local simulation reaches its reveal slot.
     private Action serverArrivedCallback;
 
-    // ApplyFaceMaterial can run before this client's local MemoryGameManager.Instance is ready
-    // (observed on joining clients, not the host) - if so, keep retrying every frame until it sticks
-    // instead of leaving the card on its default placeholder material forever.
-    private bool lastAppliedFaceUp;
-    private bool materialApplied;
-
     void Awake()
     {
         if (faceRenderer == null)
@@ -107,16 +101,10 @@ public class Card : NetworkBehaviour
 
     void ApplyFaceMaterial(bool faceUp)
     {
-        lastAppliedFaceUp = faceUp;
-        if (faceRenderer == null || MemoryGameManager.Instance == null)
-        {
-            materialApplied = false;
-            return;
-        }
+        if (faceRenderer == null || MemoryGameManager.Instance == null) return;
         faceRenderer.sharedMaterial = faceUp
             ? MemoryGameManager.Instance.GetFaceMaterial(NetPairId.Value)
             : MemoryGameManager.Instance.GetBackMaterial(NetRingIndex.Value);
-        materialApplied = true;
     }
 
     /// <summary>Server only. Assigns this card's fixed orbit slot, pair id and ring before Spawn().</summary>
@@ -147,11 +135,6 @@ public class Card : NetworkBehaviour
 
     void Update()
     {
-        if (!materialApplied)
-        {
-            ApplyFaceMaterial(lastAppliedFaceUp);
-        }
-
         switch (State)
         {
             case CardState.Free:
