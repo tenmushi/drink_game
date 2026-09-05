@@ -1564,6 +1564,7 @@ MonoBehaviour:
   - {fileID: 2800000, guid: 6d3d8b83bfa852a4699eda3e912c2ae4, type: 3}
   cardBackTextureRingA: {fileID: 2800000, guid: 3820272f77ee3e246b67f17e365404db, type: 3}
   cardBackTextureRingB: {fileID: 2800000, guid: 234170b9164e14145a4dba3e523a18de, type: 3}
+  fixedCamera: {fileID: 789274309}
   scoreText: {fileID: 795449882}
   gameOverPanel: {fileID: 879191885}
   resultText: {fileID: 183611592}

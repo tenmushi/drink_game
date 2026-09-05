@@ -29,6 +29,7 @@ public class MemoryGameManager : NetworkBehaviour
     [SerializeField] private Texture2D cardBackTextureRingB;
 
     [Header("HUD")]
+    [SerializeField] private Camera fixedCamera; // 固定視点カメラを直接参照(Camera.mainのタグ検索は使わない)
     [SerializeField] private TMP_Text scoreText;
     [SerializeField] private GameObject gameOverPanel;
     [SerializeField] private TMP_Text resultText;
@@ -73,7 +74,6 @@ public class MemoryGameManager : NetworkBehaviour
     void Awake()
     {
         Instance = this;
-        mainCamera = Camera.main;
         PrepareMaterials();
 
         // Lobby から一人称カメラを持ち越したままだと固定カメラと二重に描画されて向きがおかしくなる。
@@ -81,10 +81,15 @@ public class MemoryGameManager : NetworkBehaviour
         // NetworkManager.LocalClient.PlayerObject はシーン遷移直後だと(特にホスト以外のクライアントで)
         // まだ解決できないことがあるため、LocalNetworkPlayer() 頼みにせず全プレイヤーを見て回る -
         // SetFirstPersonViewActive は内部で IsOwner を見るので、他人の分を呼んでも何も起きない。
+        // 重要: プレイヤーの一人称カメラも "MainCamera" タグを持っているため、これを無効化する前に
+        // Camera.main を読むと、どちらが返るかは不定(2人目以降でカードの裏を向いたプレイヤー自身の
+        // カメラが選ばれてしまうことがあった)。無効化を先に済ませてから解決する。
         foreach (NetworkPlayer player in FindObjectsByType<NetworkPlayer>(FindObjectsSortMode.None))
         {
             player.SetFirstPersonViewActive(false);
+            player.SetBodyVisible(false); // カード列に体が浮いて映るのを防ぐ(所有者以外の体もここで消す)
         }
+        mainCamera = fixedCamera != null ? fixedCamera : Camera.main;
         if (mainCamera != null)
         {
             mainCamera.gameObject.SetActive(true);
