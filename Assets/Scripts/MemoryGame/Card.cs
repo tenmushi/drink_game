@@ -14,7 +14,7 @@ public class Card : NetworkBehaviour
 {
     [SerializeField] private MeshRenderer faceRenderer;
     [SerializeField] private float slotMoveSpeed = 8f;
-    [SerializeField] private float returnMoveSpeed = 2f;
+    [SerializeField] private float returnMoveSpeed = 4f;
 
     public NetworkVariable<int> NetPairId = new NetworkVariable<int>(
         0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
