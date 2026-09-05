@@ -128,6 +128,29 @@ public class MemoryGameManager : NetworkBehaviour
         }
     }
 
+    public override void OnNetworkDespawn()
+    {
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+
+        // NetworkObject.Despawn()/scene-switch auto-cleanup has proven unreliable for these
+        // dynamically-spawned cards (see the HideMatchedCard comment on Card.cs - same root Netcode
+        // bug). Leaving that to clean them up meant leftover cards from the previous round were
+        // still around (and doubled up) the next time the game started. Destroying them directly and
+        // locally here - every peer does this for itself when leaving the scene - sidesteps that
+        // entirely instead of depending on Netcode's own despawn machinery.
+        foreach (Card card in FindObjectsByType<Card>(FindObjectsSortMode.None))
+        {
+            if (card != null)
+            {
+                Destroy(card.gameObject);
+            }
+        }
+        cards.Clear();
+    }
+
     void Update()
     {
         if (!IsSpawned) return;
@@ -249,7 +272,12 @@ public class MemoryGameManager : NetworkBehaviour
 
             int ringIndex = ringA ? 0 : 1;
             card.ServerInit(pairIds[i], ringIndex, center, ringRadius, angularSpeed, startAngle);
-            go.GetComponent<NetworkObject>().Spawn();
+            NetworkObject netObj = go.GetComponent<NetworkObject>();
+            // Dynamically spawned NetworkObjects default to surviving a scene switch (they're moved
+            // to DontDestroyOnLoad) unless told otherwise - without this, leftover cards from the
+            // previous round stick around after returning to Lobby and double up on the next game.
+            netObj.DestroyWithScene = true;
+            netObj.Spawn();
             cards.Add(card);
         }
     }
