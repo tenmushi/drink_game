@@ -53,6 +53,16 @@ public class NetworkPlayer : NetworkBehaviour
         if (look != null) look.enabled = active;
     }
 
+    /// <summary>ミニゲームなど体を見せたくない画面用。所有権を問わず誰の分でも呼べる(各クライアントが
+    /// ローカルで見た目だけ消すので、ネットワーク同期は不要)。</summary>
+    public void SetBodyVisible(bool visible)
+    {
+        foreach (var r in GetComponentsInChildren<Renderer>(true))
+        {
+            r.enabled = visible;
+        }
+    }
+
     public override void OnNetworkSpawn()
     {
         SeatIndex.OnValueChanged += HandleSeatChanged;

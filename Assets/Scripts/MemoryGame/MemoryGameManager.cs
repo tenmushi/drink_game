@@ -29,7 +29,9 @@ public class MemoryGameManager : NetworkBehaviour
     [SerializeField] private Texture2D cardBackTextureRingB;
 
     [Header("HUD")]
+    [SerializeField] private Camera fixedCamera; // 固定視点カメラを直接参照(Camera.mainのタグ検索は使わない)
     [SerializeField] private TMP_Text scoreText;
+    [SerializeField] private TMP_Text turnText;
     [SerializeField] private GameObject gameOverPanel;
     [SerializeField] private TMP_Text resultText;
     [SerializeField] private Button returnToLobbyButton;
@@ -67,13 +69,13 @@ public class MemoryGameManager : NetworkBehaviour
     private readonly List<Card> selectedCards = new List<Card>();
     private bool resolving;
     private int arrivedCount;
+    private string lastTurnText;
 
     private Camera mainCamera;
 
     void Awake()
     {
         Instance = this;
-        mainCamera = Camera.main;
         PrepareMaterials();
 
         // Lobby から一人称カメラを持ち越したままだと固定カメラと二重に描画されて向きがおかしくなる。
@@ -81,10 +83,15 @@ public class MemoryGameManager : NetworkBehaviour
         // NetworkManager.LocalClient.PlayerObject はシーン遷移直後だと(特にホスト以外のクライアントで)
         // まだ解決できないことがあるため、LocalNetworkPlayer() 頼みにせず全プレイヤーを見て回る -
         // SetFirstPersonViewActive は内部で IsOwner を見るので、他人の分を呼んでも何も起きない。
+        // 重要: プレイヤーの一人称カメラも "MainCamera" タグを持っているため、これを無効化する前に
+        // Camera.main を読むと、どちらが返るかは不定(2人目以降でカードの裏を向いたプレイヤー自身の
+        // カメラが選ばれてしまうことがあった)。無効化を先に済ませてから解決する。
         foreach (NetworkPlayer player in FindObjectsByType<NetworkPlayer>(FindObjectsSortMode.None))
         {
             player.SetFirstPersonViewActive(false);
+            player.SetBodyVisible(false); // カード列に体が浮いて映るのを防ぐ(所有者以外の体もここで消す)
         }
+        mainCamera = fixedCamera != null ? fixedCamera : Camera.main;
         if (mainCamera != null)
         {
             mainCamera.gameObject.SetActive(true);
@@ -100,8 +107,10 @@ public class MemoryGameManager : NetworkBehaviour
         Score2.OnValueChanged += (_, __) => RefreshScoreText();
         Score3.OnValueChanged += (_, __) => RefreshScoreText();
         GameOver.OnValueChanged += (_, isOver) => RefreshGameOverUI(isOver);
+        CurrentTurnSeat.OnValueChanged += (_, __) => RefreshTurnText();
         RefreshScoreText();
         RefreshGameOverUI(GameOver.Value);
+        RefreshTurnText();
 
         if (returnToLobbyButton != null)
         {
@@ -122,6 +131,11 @@ public class MemoryGameManager : NetworkBehaviour
     void Update()
     {
         if (!IsSpawned) return;
+
+        // LocalNetworkPlayer() can resolve a frame or two late on a joining client, so keep
+        // retrying here until it succeeds instead of only reacting to CurrentTurnSeat changes.
+        if (lastTurnText == null) RefreshTurnText();
+
         if (mainCamera == null) return;
         if (Mouse.current == null) return;
         if (!Mouse.current.leftButton.wasPressedThisFrame) return;
@@ -324,6 +338,20 @@ public class MemoryGameManager : NetworkBehaviour
             lines.Add($"<color=#{hex}>user{seat + 1}</color>: {GetScore(seat)}組");
         }
         scoreText.text = string.Join("\n", lines);
+    }
+
+    void RefreshTurnText()
+    {
+        if (turnText == null) return;
+        NetworkPlayer local = LocalNetworkPlayer();
+        if (local == null) return; // retry next frame (see Update())
+
+        int localSeat = local.SeatIndex.Value;
+        int turnSeat = CurrentTurnSeat.Value;
+        string text = turnSeat == localSeat ? "あなたのターンです" : $"user{turnSeat + 1}のターン中です";
+        if (text == lastTurnText) return;
+        lastTurnText = text;
+        turnText.text = text;
     }
 
     void RefreshGameOverUI(bool isOver)
