@@ -1,4 +1,5 @@
 using Unity.Netcode;
+using UnityEngine.SceneManagement;
 using UnityEngine;
 
 /// <summary>
@@ -36,6 +37,9 @@ public class NetworkPlayer : NetworkBehaviour
     [Header("一人称表示")]
     [Tooltip("自分のプレイヤーの見た目を隠す。カメラが目の位置にあるため、切ると目玉の内側が映る")]
     [SerializeField] private bool hideOwnBody = true;
+    [Tooltip("一人称視点で遊ぶシーン名。ここ以外のシーン(ミニゲーム等)では自動でカメラを止め、姿も隠す")]
+    [SerializeField] private string firstPersonSceneName = "Lobby";
+
 
     [Header("同期の頻度と滑らかさ")]
     [SerializeField] private float sendInterval = 0.1f;   // 秒
@@ -58,26 +62,12 @@ public class NetworkPlayer : NetworkBehaviour
         SeatIndex.OnValueChanged += HandleSeatChanged;
         ApplyColor(SeatIndex.Value);
 
-        if (IsOwner)
-        {
-            if (playerCamera != null) playerCamera.enabled = true;
-            if (playerAudio != null) playerAudio.enabled = true;
-            if (look != null) look.enabled = true;
-
-            if (Camera.main != null && Camera.main != playerCamera)
-            {
-                Camera.main.gameObject.SetActive(false);
-            }
-
-            // 自分の体と目は隠す。カメラが目の位置にあるので、そのままだと目玉の内側が映る
-            if (hideOwnBody)
-            {
-                foreach (var r in GetComponentsInChildren<Renderer>(true))
-                {
-                    r.enabled = false;
-                }
-            }
-        }
+        // Player は動的スポーンされた NetworkObject なので、シーンを切り替えても破棄されずに生き残る。
+        // つまり OnNetworkSpawn はセッション中に一度しか呼ばれない。
+        // カメラと見た目の切り替えはシーンが変わるたびにやり直す必要があるため、
+        // ここでは購読だけして実処理は ApplyViewForScene に任せる。
+        SceneManager.activeSceneChanged += HandleActiveSceneChanged;
+        ApplyViewForScene(SceneManager.GetActiveScene().name);
 
         if (eyesRoot != null) eyesRoot.localRotation = TargetRotation();
     }
@@ -85,7 +75,56 @@ public class NetworkPlayer : NetworkBehaviour
     public override void OnNetworkDespawn()
     {
         SeatIndex.OnValueChanged -= HandleSeatChanged;
+        SceneManager.activeSceneChanged -= HandleActiveSceneChanged;
     }
+
+    private void OnDestroy()
+    {
+        // Despawn を経由せずに壊れた場合の保険。二重解除しても害はない。
+        SceneManager.activeSceneChanged -= HandleActiveSceneChanged;
+    }
+
+    private void HandleActiveSceneChanged(Scene previous, Scene next)
+    {
+        ApplyViewForScene(next.name);
+    }
+
+    /// <summary>
+    /// シーン名を見て一人称視点にするかどうかを決める。
+    /// firstPersonSceneName のとき: 自分のカメラで見る。他人の姿は見える(自分の体だけ隠す)。
+    /// それ以外のとき: 自分のカメラを止めてシーン側の固定カメラに任せ、全員の姿を隠す。
+    /// Player はシーンをまたいで生き残るため、隠さないと前のシーンの座席位置に浮いたまま映り込む。
+    /// </summary>
+    private void ApplyViewForScene(string sceneName)
+    {
+        bool firstPerson = sceneName == firstPersonSceneName;
+
+        if (IsOwner && firstPerson)
+        {
+            // 自分のカメラを有効にする前にシーン側のカメラを掴む。順番が逆だと
+            // Camera.main が自分のカメラを返してしまい、固定カメラを消し損ねる。
+            if (playerCamera != null) playerCamera.enabled = false;
+            Camera sceneCamera = Camera.main;
+            if (sceneCamera != null && sceneCamera != playerCamera)
+            {
+                sceneCamera.gameObject.SetActive(false);
+            }
+        }
+
+        SetFirstPersonViewActive(firstPerson);
+        SetBodyVisible(firstPerson);
+    }
+
+    /// <summary>自分の体はカメラが目の位置にあるので、一人称のときも隠したままにする。</summary>
+    private void SetBodyVisible(bool visible)
+    {
+        bool shouldShow = visible && !(IsOwner && hideOwnBody);
+        foreach (var r in GetComponentsInChildren<Renderer>(true))
+        {
+            r.enabled = shouldShow;
+        }
+    }
+
 
     private void Update()
     {
