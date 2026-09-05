@@ -1,3 +1,4 @@
+using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -23,6 +24,13 @@ public class NetworkPlayer : NetworkBehaviour
     /// <summary>視線角度 (x=左右, y=上下)。見た目だけの情報なので所有者が直接書く。</summary>
     public NetworkVariable<Vector2> LookAngles = new NetworkVariable<Vector2>(
         Vector2.zero,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Owner);
+
+    /// <summary>表示名。ロビー入室時に入力したものを所有者が直接書く。空なら呼び出し側が
+    /// "userN" 等にフォールバックする。</summary>
+    public NetworkVariable<FixedString64Bytes> DisplayName = new NetworkVariable<FixedString64Bytes>(
+        default,
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Owner);
 
@@ -70,6 +78,8 @@ public class NetworkPlayer : NetworkBehaviour
 
         if (IsOwner)
         {
+            DisplayName.Value = ToSafeFixedString(LobbyRoomUI.LocalPlayerName);
+
             if (playerCamera != null) playerCamera.enabled = true;
             if (playerAudio != null) playerAudio.enabled = true;
             if (look != null) look.enabled = true;
@@ -140,6 +150,19 @@ public class NetworkPlayer : NetworkBehaviour
     private void HandleSeatChanged(int previous, int current)
     {
         ApplyColor(current);
+    }
+
+    /// <summary>FixedString64Bytesの容量(UTF8で61バイト)をどんな入力でも超えないよう、
+    /// 溢れる場合は文字数を切り詰めてから変換する。</summary>
+    private static FixedString64Bytes ToSafeFixedString(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return default;
+        string s = value;
+        while (System.Text.Encoding.UTF8.GetByteCount(s) > 61 && s.Length > 0)
+        {
+            s = s.Substring(0, s.Length - 1);
+        }
+        return new FixedString64Bytes(s);
     }
 
     private void ApplyColor(int index)

@@ -29,6 +29,10 @@ public class LobbyRoomUI : MonoBehaviour
     [SerializeField] private TMP_InputField codeInput;
     [SerializeField] private TMP_Text statusText;
     [SerializeField] private TMP_Text joinCodeText;   // パネルの外に置く常時表示
+    [SerializeField] private TMP_InputField nameInput;   // ChoicePanel に置く、自分の表示名
+
+    private const string NameSaveKey = "MemoryGame.PlayerDisplayName";
+    private const int NameCharacterLimit = 10;
 
     /// <summary>発行済みの参加コード。シーンを読み直しても消えないよう static。</summary>
     public static string CurrentJoinCode;
@@ -38,6 +42,10 @@ public class LobbyRoomUI : MonoBehaviour
 
     /// <summary>切断メッセージ。次のシーンで表示する。</summary>
     public static string PendingMessage;
+
+    /// <summary>入力された表示名。NetworkPlayer が自分の所有オブジェクトをスポーンする時に読む。
+    /// PlayerPrefs にも保存するので次回以降は入力し直さなくていい。</summary>
+    public static string LocalPlayerName = "";
 
     private RelayManager relay;
     private int lastSubmitFrame = -1;
@@ -62,6 +70,14 @@ public class LobbyRoomUI : MonoBehaviour
         if (leaveButton != null) leaveButton.onClick.AddListener(OnLeave);
         if (startGameButton != null) startGameButton.onClick.AddListener(OnStartGame);
         if (codeInput != null) codeInput.onSubmit.AddListener(_ => TrySubmitJoin());
+
+        if (nameInput != null)
+        {
+            nameInput.characterLimit = NameCharacterLimit;
+            LocalPlayerName = PlayerPrefs.GetString(NameSaveKey, "");
+            nameInput.text = LocalPlayerName;
+            nameInput.onValueChanged.AddListener(SaveLocalPlayerName);
+        }
 
         var nm = NetworkManager.Singleton;
         if (nm != null)
@@ -242,6 +258,13 @@ public class LobbyRoomUI : MonoBehaviour
         joinCodeText.text = string.IsNullOrEmpty(CurrentJoinCode)
             ? ""
             : "ルームID  " + CurrentJoinCode;
+    }
+
+    /// <summary>名前欄が変わるたびに呼ばれる。次回以降のために PlayerPrefs にも残しておく。</summary>
+    private void SaveLocalPlayerName(string value)
+    {
+        LocalPlayerName = value;
+        PlayerPrefs.SetString(NameSaveKey, value);
     }
 
     private void SetStatus(string message)

@@ -363,7 +363,7 @@ public class MemoryGameManager : NetworkBehaviour
             if (!IsSeatConnected(seat)) continue;
             Color c = NetworkPlayer.SeatColors[seat];
             string hex = ColorUtility.ToHtmlStringRGB(c);
-            lines.Add($"<color=#{hex}>user{seat + 1}</color>: {GetScore(seat)}組");
+            lines.Add($"<color=#{hex}>{DisplayNameForSeat(seat)}</color>: {GetScore(seat)}組");
         }
         scoreText.text = string.Join("\n", lines);
     }
@@ -376,7 +376,7 @@ public class MemoryGameManager : NetworkBehaviour
 
         int localSeat = local.SeatIndex.Value;
         int turnSeat = CurrentTurnSeat.Value;
-        string text = turnSeat == localSeat ? "あなたのターンです" : $"user{turnSeat + 1}のターン中です";
+        string text = turnSeat == localSeat ? "あなたのターンです" : $"{DisplayNameForSeat(turnSeat)}のターン中です";
         if (text == lastTurnText) return;
         lastTurnText = text;
         turnText.text = text;
@@ -408,7 +408,7 @@ public class MemoryGameManager : NetworkBehaviour
 
         if (resultText != null)
         {
-            resultText.text = tie || bestSeat < 0 ? "引き分け!" : $"user{bestSeat + 1} の勝ち!";
+            resultText.text = tie || bestSeat < 0 ? "引き分け!" : $"{DisplayNameForSeat(bestSeat)} の勝ち!";
         }
 
         bool isHost = NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost;
@@ -425,16 +425,26 @@ public class MemoryGameManager : NetworkBehaviour
         nm.SceneManager.LoadScene("Lobby", LoadSceneMode.Single);
     }
 
-    static bool IsSeatConnected(int seat)
+    static NetworkPlayer GetPlayerForSeat(int seat)
     {
         NetworkManager nm = NetworkManager.Singleton;
-        if (nm == null) return false;
+        if (nm == null) return null;
         foreach (var kvp in nm.ConnectedClients)
         {
             NetworkPlayer player = kvp.Value.PlayerObject != null ? kvp.Value.PlayerObject.GetComponent<NetworkPlayer>() : null;
-            if (player != null && player.SeatIndex.Value == seat) return true;
+            if (player != null && player.SeatIndex.Value == seat) return player;
         }
-        return false;
+        return null;
+    }
+
+    static bool IsSeatConnected(int seat) => GetPlayerForSeat(seat) != null;
+
+    /// <summary>ロビーで入力された表示名。未入力なら"userN"にフォールバックする。</summary>
+    static string DisplayNameForSeat(int seat)
+    {
+        NetworkPlayer player = GetPlayerForSeat(seat);
+        string name = player != null ? player.DisplayName.Value.ToString() : "";
+        return string.IsNullOrWhiteSpace(name) ? $"user{seat + 1}" : name;
     }
 
     int GetScore(int seat)
