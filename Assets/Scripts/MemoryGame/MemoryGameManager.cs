@@ -31,6 +31,7 @@ public class MemoryGameManager : NetworkBehaviour
     [Header("HUD")]
     [SerializeField] private Camera fixedCamera; // 固定視点カメラを直接参照(Camera.mainのタグ検索は使わない)
     [SerializeField] private TMP_Text scoreText;
+    [SerializeField] private TMP_Text turnText;
     [SerializeField] private GameObject gameOverPanel;
     [SerializeField] private TMP_Text resultText;
     [SerializeField] private Button returnToLobbyButton;
@@ -68,6 +69,7 @@ public class MemoryGameManager : NetworkBehaviour
     private readonly List<Card> selectedCards = new List<Card>();
     private bool resolving;
     private int arrivedCount;
+    private string lastTurnText;
 
     private Camera mainCamera;
 
@@ -105,8 +107,10 @@ public class MemoryGameManager : NetworkBehaviour
         Score2.OnValueChanged += (_, __) => RefreshScoreText();
         Score3.OnValueChanged += (_, __) => RefreshScoreText();
         GameOver.OnValueChanged += (_, isOver) => RefreshGameOverUI(isOver);
+        CurrentTurnSeat.OnValueChanged += (_, __) => RefreshTurnText();
         RefreshScoreText();
         RefreshGameOverUI(GameOver.Value);
+        RefreshTurnText();
 
         if (returnToLobbyButton != null)
         {
@@ -127,6 +131,11 @@ public class MemoryGameManager : NetworkBehaviour
     void Update()
     {
         if (!IsSpawned) return;
+
+        // LocalNetworkPlayer() can resolve a frame or two late on a joining client, so keep
+        // retrying here until it succeeds instead of only reacting to CurrentTurnSeat changes.
+        if (lastTurnText == null) RefreshTurnText();
+
         if (mainCamera == null) return;
         if (Mouse.current == null) return;
         if (!Mouse.current.leftButton.wasPressedThisFrame) return;
@@ -329,6 +338,20 @@ public class MemoryGameManager : NetworkBehaviour
             lines.Add($"<color=#{hex}>user{seat + 1}</color>: {GetScore(seat)}組");
         }
         scoreText.text = string.Join("\n", lines);
+    }
+
+    void RefreshTurnText()
+    {
+        if (turnText == null) return;
+        NetworkPlayer local = LocalNetworkPlayer();
+        if (local == null) return; // retry next frame (see Update())
+
+        int localSeat = local.SeatIndex.Value;
+        int turnSeat = CurrentTurnSeat.Value;
+        string text = turnSeat == localSeat ? "あなたのターンです" : $"user{turnSeat + 1}のターン中です";
+        if (text == lastTurnText) return;
+        lastTurnText = text;
+        turnText.text = text;
     }
 
     void RefreshGameOverUI(bool isOver)
