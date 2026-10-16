@@ -928,11 +928,11 @@ PlayerSettings:
   captureStartupLogs: {}
   activeInputHandler: 1
   windowsGamepadBackendHint: 0
-  cloudProjectId: 69ba594e-9372-47b6-9e4f-e66f6546d161
+  cloudProjectId: c14f2fe3-b609-4432-964f-f5002e2d6f33
   framebufferDepthMemorylessMode: 0
   qualitySettingsNames: []
   projectName: drink_game
-  organizationId: wfs748tczt
+  organizationId: sburo8463
   cloudEnabled: 0
   legacyClampBlendShapeWeights: 0
   hmiLoadingImage: {fileID: 0}
