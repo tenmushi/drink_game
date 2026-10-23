@@ -8,6 +8,7 @@ using Unity.Services.Core;
 using Unity.Services.Relay;
 using Unity.Services.Relay.Models;
 using UnityEngine;
+using Unity.Services.Vivox;
 
 public class RelayManager : MonoBehaviour
 {
@@ -19,6 +20,8 @@ public class RelayManager : MonoBehaviour
         {
             await AuthenticationService.Instance.SignInAnonymouslyAsync();
         }
+        await VivoxService.Instance.InitializeAsync();
+        await VivoxService.Instance.LoginAsync();
     }
 
     public async Task<string> CreateRelay()

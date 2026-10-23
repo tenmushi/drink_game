@@ -1,5 +1,6 @@
 using TMPro;
 using Unity.Netcode;
+using Unity.Services.Vivox;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
@@ -161,6 +162,10 @@ public class LobbyRoomUI : MonoBehaviour
 
         CurrentJoinCode = code;
         RefreshJoinCode();
+
+        await VivoxService.Instance.JoinGroupChannelAsync(
+        code,ChatCapability.AudioOnly);
+
         SetStatus("他のプレイヤーの参加を待っています");
         SetStartButtonVisible(true);
     }
@@ -200,6 +205,10 @@ public class LobbyRoomUI : MonoBehaviour
 
         CurrentJoinCode = code;
         RefreshJoinCode();
+
+        await VivoxService.Instance.JoinGroupChannelAsync(
+        code,ChatCapability.AudioOnly);
+
         SetStatus("接続しました");
         SetStartButtonVisible(false);
     }
