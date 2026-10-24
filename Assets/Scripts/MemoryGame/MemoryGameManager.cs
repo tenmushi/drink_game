@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -160,6 +161,9 @@ public class MemoryGameManager : NetworkBehaviour
         if (mainCamera == null) return;
         if (Mouse.current == null) return;
         if (!Mouse.current.leftButton.wasPressedThisFrame) return;
+
+        // ボタン(飲むボタンなど)を押したクリックが、後ろのカードまで届かないようにする
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
 
         // UX-only local gate (is it my seat's turn) - the server re-checks this for real.
         NetworkPlayer localPlayer = LocalNetworkPlayer();
