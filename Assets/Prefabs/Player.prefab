@@ -496,6 +496,7 @@ GameObject:
   - component: {fileID: 962603259602389022}
   - component: {fileID: 2267734950770513889}
   - component: {fileID: 5045688994112473870}
+  - component: {fileID: 7515407083192502887}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -652,6 +653,35 @@ MonoBehaviour:
   sendInterval: 0.1
   sendThreshold: 1.5
   turnSharpness: 12
+--- !u!114 &7515407083192502887
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8406145720580046199}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 536fa82d3a4e50d41a31e9475be353af, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MugInteractor
+  ShowTopMostFoldoutHeaderGroup: 1
+  playerCamera: {fileID: 29070167660318886}
+  eyesRoot: {fileID: 3911550742494975278}
+  reach: 0.8
+  clickMoveTolerance: 10
+  holdOffset: {x: 0.15, y: -0.18, z: 0.38}
+  lipOffset: {x: 0, y: -0.09, z: 0.09}
+  remoteLipOffset: {x: 0, y: -0.12, z: 0.26}
+  mugHeight: 0.117
+  sipStartTilt: 75
+  sipEndTilt: 105
+  handleYaw: 180
+  liftDuration: 0.5
+  raiseDuration: 0.5
+  sipDuration: 1
+  lowerDuration: 0.4
+  putDownDuration: 0.5
 --- !u!1 &8634818858712933599
 GameObject:
   m_ObjectHideFlags: 0
