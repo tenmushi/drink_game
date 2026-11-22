@@ -11,12 +11,25 @@ using UnityEngine.InputSystem;
 ///
 /// 左ドラッグは視点操作(FirstPersonLook)なので、押してからほとんど動かさずに離したときだけクリックとみなす。
 /// 自分のカメラが有効なとき(= 一人称視点のロビー)だけ動く。
-/// 今は自分の画面だけの演出で、他のプレイヤーには同期していない。
+///
+/// 他のプレイヤーには「どのマグを飲んでいるか」だけを DrinkingMugId で送り、動き自体は各端末が同じ手順で再生する。
+/// 他人の Head(カメラ)は回らないので、他人の動きは視線が同期されている目(eyesRoot)を基準にする。
+/// 酔い度がたまるのは飲んだ本人だけ。
 /// </summary>
 public class MugInteractor : NetworkBehaviour
 {
+    private const int NoMug = -1;
+
+    /// <summary>今飲んでいるマグの Id。飲んでいなければ -1。見た目だけの情報なので所有者が直接書く。</summary>
+    public NetworkVariable<int> DrinkingMugId = new NetworkVariable<int>(
+        NoMug,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Owner);
+
     [Header("参照")]
     [SerializeField] private Camera playerCamera;
+    [Tooltip("他のプレイヤーの画面で動かすときの基準。NetworkPlayer の eyesRoot と同じ Eyes")]
+    [SerializeField] private Transform eyesRoot;
 
     [Header("クリック")]
     [Tooltip("目からこの距離(m)までのマグを持てる。0.8 なら自分の席の前のマグだけ")]
@@ -29,6 +42,8 @@ public class MugInteractor : NetworkBehaviour
     [SerializeField] private Vector3 holdOffset = new Vector3(0.15f, -0.18f, 0.38f);
     [Tooltip("口の位置。飲んでいる間、マグの縁をここに当てる。前に出しすぎると空のマグの中が見える")]
     [SerializeField] private Vector3 lipOffset = new Vector3(0f, -0.09f, 0.09f);
+    [Tooltip("他のプレイヤーから見たときの口の位置。体(半径 0.225)にめり込まないよう前に出す")]
+    [SerializeField] private Vector3 remoteLipOffset = new Vector3(0f, -0.12f, 0.26f);
     [Tooltip("マグの高さ(m)。原点(底)から縁までの距離")]
     [SerializeField] private float mugHeight = 0.117f;
     [Tooltip("口を付けたときの傾き(度)。小さいとマグの中が見える")]
@@ -53,6 +68,18 @@ public class MugInteractor : NetworkBehaviour
     private bool ViewActive
     {
         get { return playerCamera != null && playerCamera.enabled; }
+    }
+
+    /// <summary>自分は自分のカメラ、他人は目を基準に動かす。</summary>
+    private Transform Head
+    {
+        get { return IsOwner ? playerCamera.transform : eyesRoot; }
+    }
+
+    /// <summary>動かし続けてよいか。自分はカメラが止まったら(ロビー以外)やめる。他人はマグが消えたらやめる(Tween 側で見る)。</summary>
+    private bool CanAnimate
+    {
+        get { return IsOwner ? ViewActive : eyesRoot != null; }
     }
 
     private void Update()
@@ -82,14 +109,34 @@ public class MugInteractor : NetworkBehaviour
         StartCoroutine(DrinkRoutine(mug));
     }
 
+    public override void OnNetworkSpawn()
+    {
+        DrinkingMugId.OnValueChanged += HandleDrinkingMugChanged;
+    }
+
     public override void OnNetworkDespawn()
     {
-        StopDrinking();
+        DrinkingMugId.OnValueChanged -= HandleDrinkingMugChanged;
+        ReleaseMug();
     }
 
     private void OnDisable()
     {
-        StopDrinking();
+        ReleaseMug();
+    }
+
+    /// <summary>
+    /// 他のプレイヤーが飲み始めたら、こちらの画面でも同じ動きを再生する。-1 になったら(飲み終わり・中断)マグを戻す。
+    /// 同じマグを同時に取り合ったときは、先にこちらで動いているほうを優先する。
+    /// </summary>
+    private void HandleDrinkingMugChanged(int previous, int next)
+    {
+        if (IsOwner) return;
+
+        ReleaseMug();
+        var mug = DrinkableMug.FromId(next);
+        if (mug == null || mug.InUse) return;
+        StartCoroutine(DrinkRoutine(mug));
     }
 
     private IEnumerator DrinkRoutine(DrinkableMug mug)
@@ -97,6 +144,7 @@ public class MugInteractor : NetworkBehaviour
         current = mug;
         interrupted = false;
         mug.InUse = true;
+        if (IsOwner) DrinkingMugId.Value = mug.Id;
 
         var home = new Pose(mug.HomePosition, mug.HomeRotation);
         Func<Pose> atHome = () => home;
@@ -108,7 +156,7 @@ public class MugInteractor : NetworkBehaviour
         yield return Tween(mug, inHand, sipStart, raiseDuration);
         yield return Tween(mug, sipStart, sipEnd, sipDuration);
 
-        if (!interrupted && DrunkMeter.Instance != null) DrunkMeter.Instance.Drink();
+        if (IsOwner && !interrupted && DrunkMeter.Instance != null) DrunkMeter.Instance.Drink();
 
         yield return Tween(mug, sipEnd, inHand, lowerDuration);
         yield return Tween(mug, inHand, atHome, putDownDuration);
@@ -124,7 +172,7 @@ public class MugInteractor : NetworkBehaviour
     {
         for (float t = 0f; t < duration; t += Time.deltaTime)
         {
-            if (interrupted || mug == null || !ViewActive)
+            if (interrupted || mug == null || !CanAnimate)
             {
                 interrupted = true;
                 yield break;
@@ -150,7 +198,7 @@ public class MugInteractor : NetworkBehaviour
     /// </summary>
     private Pose HeadPose(Vector3 offset, float tilt)
     {
-        Transform head = playerCamera.transform;
+        Transform head = Head;
         Vector3 forward = Vector3.ProjectOnPlane(head.forward, Vector3.up);
         if (forward.sqrMagnitude < 0.0001f) forward = transform.forward;
         Quaternion frame = Quaternion.LookRotation(forward, Vector3.up);
@@ -163,13 +211,20 @@ public class MugInteractor : NetworkBehaviour
     /// <summary>口元で飲んでいる姿勢。マグの縁が口に来るよう、傾けた分だけ底(原点)の位置をずらす。</summary>
     private Pose MouthPose(float tilt)
     {
-        Pose pose = HeadPose(lipOffset, tilt);
+        Pose pose = HeadPose(IsOwner ? lipOffset : remoteLipOffset, tilt);
         pose.position -= pose.rotation * (Vector3.up * mugHeight);
         return pose;
     }
 
-    /// <summary>途中でも終わりでも、持っているマグをテーブルに戻す。</summary>
+    /// <summary>飲み終わり・中断のとき。マグを戻し、他のプレイヤーにも飲み終わったことを伝える。</summary>
     private void StopDrinking()
+    {
+        ReleaseMug();
+        if (IsOwner && IsSpawned && DrinkingMugId.Value != NoMug) DrinkingMugId.Value = NoMug;
+    }
+
+    /// <summary>途中でも終わりでも、持っているマグをテーブルに戻す(この端末の中だけ)。</summary>
+    private void ReleaseMug()
     {
         StopAllCoroutines();
         if (current != null) current.ReturnHome();
