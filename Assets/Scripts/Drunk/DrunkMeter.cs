@@ -84,7 +84,7 @@ public class DrunkMeter : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
-    /// <summary>1杯飲む。「飲む」ボタンから呼ばれる。罰ゲームなどから呼んでもいい。</summary>
+    /// <summary>1杯飲む。「飲む」ボタンと、ロビーのマグ(MugInteractor)から呼ばれる。罰ゲームなどから呼んでもいい。</summary>
     public void Drink()
     {
         Level = Mathf.Clamp01(Level + drinkAmount);
